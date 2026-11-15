@@ -2,24 +2,23 @@ name: morning-digest
 
 on:
   schedule:
-    # KST 08:50 / 09:40 (월~금). 1회차에 아직 안 올라왔으면 2회차가 처리하고, 이미 처리했으면 건너뜀.
-    - cron: "50 23 * * 0-4"
-    - cron: "40 0 * * 1-5"
+    # 월~금 KST 08:40 시작 (UTC 일~목 23:40). 모닝코멘트가 올라올 때까지 최대 50분 기다렸다가 발송.
+    - cron: "40 23 * * 0-4"
   workflow_dispatch:
     inputs:
       force:
-        description: "오늘자가 아니어도 가장 최근 글 처리"
+        description: "오늘자가 아니어도 가장 최근 글 발송 (테스트용)"
         type: boolean
         default: false
       list_only:
-        description: "네이버 수집 결과만 출력(디버그)"
+        description: "네이버 수집 결과만 출력 (디버그)"
         type: boolean
         default: false
 
 jobs:
   digest:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,14 +29,11 @@ jobs:
       - name: Run
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
-          GOOGLE_DOC_ID: ${{ secrets.GOOGLE_DOC_ID }}
-          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
-          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
-          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
-          GH_PAT: ${{ secrets.GH_PAT }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
         run: |
-          args=""
-          if [ "${{ inputs.force }}" = "true" ]; then args="$args --force"; fi
-          if [ "${{ inputs.list_only }}" = "true" ]; then args="$args --list"; fi
+          args="--wait 50"
+          if [ "${{ inputs.force }}" = "true" ]; then args="--force"; fi
+          if [ "${{ inputs.list_only }}" = "true" ]; then args="--list"; fi
           python scripts/morning_digest.py $args
