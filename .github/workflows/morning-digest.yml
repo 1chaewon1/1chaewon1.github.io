@@ -1,0 +1,39 @@
+name: morning-digest
+
+on:
+  schedule:
+    # 월~금 KST 08:40 시작 (UTC 일~목 23:40). 모닝코멘트가 올라올 때까지 최대 50분 기다렸다가 발송.
+    - cron: "40 23 * * 0-4"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "오늘자가 아니어도 가장 최근 글 발송 (테스트용)"
+        type: boolean
+        default: false
+      list_only:
+        description: "네이버 수집 결과만 출력 (디버그)"
+        type: boolean
+        default: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          args="--wait 50"
+          if [ "${{ inputs.force }}" = "true" ]; then args="--force"; fi
+          if [ "${{ inputs.list_only }}" = "true" ]; then args="--list"; fi
+          python scripts/morning_digest.py $args
