@@ -1,5 +1,10 @@
 # 모닝코멘트 자동 해설 메일 — 설정 (Secret 3개면 끝)
 
+> **현재 운영 방식**: Claude 예약 작업(구독 사용, API 키 불필요)이 평일 아침 실행해 Gmail 커넥터로 발송합니다.
+> 아래 Actions 방식은 API 키/앱 비밀번호를 직접 쓰는 **대안**입니다. 네이버 수집은 두 방식 모두
+> Npay 증권 JSON API(`stock.naver.com/api/stockSecurity/researches/v2/market`)를 사용합니다.
+
+
 평일 아침 KB 리서치 모닝코멘트 → Claude 가 초보자용으로 해설 → **내 Gmail 로 발송**.
 
 레포 → Settings → Secrets and variables → Actions → **New repository secret** 으로 아래 3개를 만드세요.

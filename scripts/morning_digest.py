@@ -28,85 +28,44 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from urllib.parse import urljoin
 
 import requests
-from bs4 import BeautifulSoup
 
 KST = dt.timezone(dt.timedelta(hours=9))
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"}
 # 네이버 증권 리서치 목록 페이지들. 모닝코멘트가 올라오는 곳을 모두 훑는다.
-LIST_URLS = [
-    "https://finance.naver.com/research/market_info_list.naver",
-    "https://finance.naver.com/research/invest_list.naver",
-    "https://finance.naver.com/research/economy_list.naver",
-]
-PAGES_PER_LIST = 2
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
 
 
 # ───────────────────────── 1. 네이버에서 수집 ─────────────────────────
+# 네이버 증권(Npay 증권)의 리서치 화면이 쓰는 JSON API. HTML 파싱이 필요 없다.
+API = "https://stock.naver.com/api/stockSecurity/researches/v2/market"
+HEADERS = {**UA, "Accept": "application/json", "Referer": "https://stock.naver.com/research/daily"}
+
+
 @dataclass
 class Report:
     title: str
     broker: str
     date: dt.date | None
     pdf_url: str | None
-    detail_url: str | None
+    content: str  # 목록 API가 주는 요약 본문(텍스트)
+    nid: str = ""
 
 
-def _parse_date(text: str) -> dt.date | None:
-    m = re.search(r"(\d{2,4})[.\-/](\d{1,2})[.\-/](\d{1,2})", text)
-    if not m:
-        return None
-    y, mo, d = (int(x) for x in m.groups())
-    if y < 100:
-        y += 2000
-    try:
-        return dt.date(y, mo, d)
-    except ValueError:
-        return None
+def html_to_text(h: str) -> str:
+    h = re.sub(r"<br\s*/?>|</p>", "\n", h)
+    return H.unescape(re.sub(r"<[^>]+>", "", h)).replace("\xa0", " ").strip()
 
 
-def parse_list(html: str, base_url: str) -> list[Report]:
-    soup = BeautifulSoup(html, "html.parser")
-    out: list[Report] = []
-    for tr in soup.select("table tr"):
-        tds = tr.find_all("td")
-        if len(tds) < 3:
-            continue
-        link = next((a for a in tr.find_all("a", href=True) if a.get_text(strip=True)), None)
-        if not link:
-            continue
-        pdf = next(
-            (urljoin(base_url, a["href"]) for a in tr.find_all("a", href=True)
-             if ".pdf" in a["href"].lower() or "pstatic.net/stock-research" in a["href"]),
-            None,
-        )
-        title = link.get_text(" ", strip=True)
-        texts = [td.get_text(" ", strip=True) for td in tds]
-        broker = next((t for t in texts[1:] if t and t != title and not _parse_date(t) and not t.isdigit()), "")
-        date = next((d for d in (_parse_date(t) for t in texts) if d), None)
-        out.append(Report(title, broker, date, pdf, urljoin(base_url, link["href"])))
-    return out
-
-
-def fetch_html(url: str) -> str:
-    r = requests.get(url, headers=UA, timeout=30)
+def collect_reports(size: int = 40) -> list[Report]:
+    r = requests.get(API, params={"index": 0, "size": size}, headers=HEADERS, timeout=30)
     r.raise_for_status()
-    r.encoding = "euc-kr"
-    return r.text
-
-
-def collect_reports() -> list[Report]:
-    found: list[Report] = []
-    for base in LIST_URLS:
-        for page in range(1, PAGES_PER_LIST + 1):
-            try:
-                found += parse_list(fetch_html(f"{base}?page={page}"), base)
-            except requests.RequestException as e:
-                print(f"[warn] {base} p{page}: {e}", file=sys.stderr)
-    return found
+    out = []
+    for it in r.json().get("items", []):
+        out.append(Report(it["title"], it.get("brokerName", ""), dt.date.fromisoformat(it["writeDate"]),
+                          None, html_to_text(it.get("content", "")), str(it["nid"])))
+    return out
 
 
 def is_kb_morning(r: Report) -> bool:
@@ -114,22 +73,20 @@ def is_kb_morning(r: Report) -> bool:
 
 
 def resolve_pdf(r: Report) -> str:
-    if r.pdf_url:
-        return r.pdf_url
-    if r.detail_url:  # 목록에 PDF 링크가 없으면 상세 페이지에서 찾는다
-        soup = BeautifulSoup(fetch_html(r.detail_url), "html.parser")
-        for a in soup.find_all("a", href=True):
-            if ".pdf" in a["href"].lower() or "pstatic.net/stock-research" in a["href"]:
-                return urljoin(r.detail_url, a["href"])
-    raise RuntimeError(f"PDF 링크를 찾지 못했습니다: {r.title} ({r.detail_url})")
+    """상세 API 에서 원문 PDF 주소를 가져온다."""
+    d = requests.get(f"{API}/{r.nid}", headers=HEADERS, timeout=30)
+    d.raise_for_status()
+    url = d.json().get("attachUrl")
+    if not url:
+        raise RuntimeError(f"PDF 링크가 없습니다: {r.title}")
+    return url
 
 
 def pdf_text(url: str) -> str:
     from pypdf import PdfReader
     r = requests.get(url, headers=UA, timeout=60)
     r.raise_for_status()
-    reader = PdfReader(io.BytesIO(r.content))
-    return "\n".join((p.extract_text() or "") for p in reader.pages).strip()
+    return "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(r.content)).pages).strip()
 
 
 # ───────────────────────── 2. Claude 해설 ─────────────────────────
@@ -252,7 +209,7 @@ def main() -> int:
 
     today = dt.datetime.now(KST).date()
     if a.pdf_url:
-        rep, pdf_url = Report("KB 리서치 모닝코멘트(수동)", "KB증권", today, a.pdf_url, None), a.pdf_url
+        rep, pdf_url = Report("KB 리서치 모닝코멘트(수동)", "KB증권", today, a.pdf_url, ""), a.pdf_url
     else:
         if a.list:
             reports = collect_reports()
@@ -270,9 +227,9 @@ def main() -> int:
             return 0
         pdf_url = resolve_pdf(rep)
 
-    text = pdf_text(pdf_url)
+    text = rep.content or pdf_text(pdf_url)
     if len(text) < 200:
-        print("PDF 에서 텍스트를 거의 못 뽑았습니다(이미지 PDF?).", file=sys.stderr)
+        print("본문 텍스트가 너무 짧습니다.", file=sys.stderr)
         return 3
     d = explain(text)
     subject, body_t, body_h = render_email(d, rep, pdf_url, rep.date or today)
