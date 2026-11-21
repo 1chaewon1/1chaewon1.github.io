@@ -105,7 +105,7 @@ PROMPT = """당신은 경제 공부를 막 시작한 사람을 돕는 친절한 
    "earnings": [{"fact": "실적·가이던스·수주 등 기업 소식", "explain": "..."}],
    "theme":    [{"fact": "AI·반도체·전력 등 산업/테마 소식", "explain": "..."}]
  },
- "step2": [{"headline": "원문 속 한 줄 사실", "thought": "속으로 하는 생각: '→ ...?' 형태의 연결 질문/추론", "why": "왜 그렇게 연결되는지 풀이 2~3문장"}],
+ "step2": [{"headline": "원문 속 한 줄 사실", "thought": "이 사실에서 이어서 생각해볼 질문: '→ ...?' 형태", "why": "이 질문이 왜 나오는지, 어떤 논리로 이어지는지 풀이 2~3문장"}],
  "glossary": [{"term": "오늘 나온 어려운 용어", "meaning": "쉬운 설명 + 일상 비유 1개"}],
  "todays_question": "오늘 스스로 더 찾아볼 만한 질문 1개"
 }
@@ -153,8 +153,8 @@ def render_email(d: dict, r: Report, pdf_url: str, date: dt.date) -> tuple[str, 
             t += [f"• {it['fact']}", f"   → 쉽게 말하면: {it['explain']}"]
             h.append(f'<div style="margin:8px 0"><b>• {e(it["fact"])}</b><br>'
                      f'<span style="color:#444">→ 쉽게 말하면: {e(it["explain"])}</span></div>')
-    t += ["", "STEP 2) 속으로 생각하기"]
-    h.append('<h3 style="border-bottom:2px solid #222;padding-bottom:4px;margin-top:28px">STEP 2) 속으로 생각하기</h3>')
+    t += ["", "STEP 2) 생각해볼 거리"]
+    h.append('<h3 style="border-bottom:2px solid #222;padding-bottom:4px;margin-top:28px">STEP 2) 생각해볼 거리</h3>')
     for it in d["step2"]:
         t += [it["headline"], f"→ {it['thought']}", f"   왜? {it['why']}", ""]
         h.append(f'<div style="margin:12px 0"><div>{e(it["headline"])}</div>'
