@@ -153,8 +153,8 @@ def render_email(d: dict, r: Report, pdf_url: str, date: dt.date) -> tuple[str, 
             t += [f"• {it['fact']}", f"   → 쉽게 말하면: {it['explain']}"]
             h.append(f'<div style="margin:8px 0"><b>• {e(it["fact"])}</b><br>'
                      f'<span style="color:#444">→ 쉽게 말하면: {e(it["explain"])}</span></div>')
-    t += ["", "STEP 2) 생각해볼 거리"]
-    h.append('<h3 style="border-bottom:2px solid #222;padding-bottom:4px;margin-top:28px">STEP 2) 생각해볼 거리</h3>')
+    t += ["", "STEP 2) 생각거리"]
+    h.append('<h3 style="border-bottom:2px solid #222;padding-bottom:4px;margin-top:28px">STEP 2) 생각거리</h3>')
     for it in d["step2"]:
         t += [it["headline"], f"→ {it['thought']}", f"   왜? {it['why']}", ""]
         h.append(f'<div style="margin:12px 0"><div>{e(it["headline"])}</div>'
